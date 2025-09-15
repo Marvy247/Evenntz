@@ -1,0 +1,329 @@
+"use client";
+
+import Link from "next/link";
+import { useEvents } from "@/hooks/useEvents";
+import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
+import { uploadImageToIPFS, uploadJsonToIPFS } from "@/lib/ipfs";
+import { apiUpdateEvent } from "@/lib/api";
+import React from "react";
+
+const SUBMIT_KEY = (id: string) => `evenntz.events.submissions.${id}`;
+
+type Submission = {
+  id?: string; // Backend submission ID
+  values: Record<string, string>;
+  at: number;
+  status: "pending" | "approved" | "rejected";
+  address?: string;
+  qrCid?: string;
+  qrUrl?: string;
+  jsonCid?: string;
+  jsonUrl?: string;
+  signature?: string;
+};
+
+export default function ReviewSubmissionsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = React.use(params);
+  const { events, loading } = useEvents();
+  const event = events.find((e) => e.id === id);
+  const { address, isConnected: isWalletConnected } = useAccount();
+  const [subs, setSubs] = useState<Submission[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        console.log('Fetching registrations for event:', id);
+        // Use backend API to get registrations
+        const res = await fetch(`
+https://evenntz.onrender.com/api
+/events/${id}/registrations`);
+        
+        console.log('Response status:', res.status);
+        console.log('Response headers:', res.headers);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Error response:', errorText);
+          throw new Error(`Failed to fetch registrations: ${res.status} - ${errorText}`);
+        }
+        
+        const data = await res.json();
+        console.log('Fetched registrations data:', data);
+        
+        // Map backend data to local type
+        const mapped: Submission[] = (data || []).map((s: any) => ({
+          id: s.id, // Include the backend ID
+          values: s.values || {},
+          at: new Date(s.createdAt || Date.now()).getTime(),
+          status: s.status || "pending",
+          address: s.address,
+          qrCid: s.qrCid,
+          qrUrl: s.qrUrl,
+          jsonCid: s.jsonCid,
+          jsonUrl: s.jsonUrl,
+          signature: s.signature,
+        }));
+        
+        setSubs(mapped);
+      } catch (e) {
+        console.error('Failed to load registrations from backend:', e);
+        // If backend fails, show empty state
+        setSubs([]);
+      }
+    }
+    load();
+  }, [id]);
+
+
+
+
+
+  if (!event) {
+    if (loading) {
+      return (
+        <main className="mx-auto max-w-3xl px-4 py-12">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-foreground/20 border-t-foreground rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-sm text-foreground/60">Loading event...</p>
+          </div>
+        </main>
+      );
+    }
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-12">
+        <p className="text-sm">Event not found.</p>
+      </main>
+    );
+  }
+
+  // Check wallet connection first
+  if (!isWalletConnected) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-12">
+        <div className="mb-6"><Link href={`/events/${id}`} className="text-sm hover:underline">← Back to event</Link></div>
+        <div className="space-y-4">
+          <p className="text-sm">Wallet not connected. Please connect your wallet to review registrations.</p>
+          <p className="text-sm text-foreground/70">Make sure you're connected with the same wallet that created this event.</p>
+        </div>
+      </main>
+    );
+  }
+
+
+
+  const isHost = event.hostAddress && event.hostAddress === address?.toLowerCase();
+  if (!isHost) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-12">
+        <div className="mb-6"><Link href={`/events/${id}`} className="text-sm hover:underline">← Back to event</Link></div>
+        <div className="space-y-4">
+        <p className="text-sm">Not authorized. Connect as the host wallet to review registrations.</p>
+          
+          
+        </div>
+      </main>
+    );
+  }
+
+  async function approve(index: number) {
+    const s = subs[index];
+    if (!s) return;
+
+    try {
+      // Check if submission has backend ID
+      if (!s.id) {
+        throw new Error('This registration is missing its backend identifier. Please ensure the participant has completed their registration through the proper channels.');
+      }
+
+      let updatePayload: any = { status: 'approved' };
+
+      // Only generate QR code for FREE events
+      // Paid events should get QR codes after payment, not after approval
+      if (!event.isPaid) {
+        console.log('🆓 Free event - generating QR code after approval');
+        
+        // Generate QR code with event and participant information
+        const qrPayload = {
+          eventId: id,
+          eventName: event.name,
+          participantAddress: s.address,
+          participantName: s.values.name || s.values.Name || 'Anonymous',
+          approvalDate: new Date().toISOString(),
+          type: 'event-ticket'
+        };
+        
+        // Create QR code image
+        const qrData = encodeURIComponent(JSON.stringify(qrPayload));
+        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}&format=png&margin=10`;
+        
+        // Upload QR code to IPFS
+        const qrUpload = await uploadImageToIPFS(qrImageUrl);
+        
+        // Upload QR payload JSON to IPFS
+        const jsonUpload = await uploadJsonToIPFS(qrPayload);
+        
+        // Add QR data to update payload
+        updatePayload.qrCid = qrUpload.cid;
+        updatePayload.qrUrl = qrUpload.url;
+        updatePayload.jsonCid = jsonUpload.cid;
+        updatePayload.jsonUrl = jsonUpload.url;
+      } else {
+        console.log('💰 Paid event - approval only, QR code will be generated after payment');
+      }
+
+      // Update submission status in backend
+      console.log(`🔄 Updating registration ${s.id} for event ${id}...`);
+      console.log(`📤 Payload:`, updatePayload);
+      
+      const response = await fetch(`
+https://evenntz.onrender.com/api
+/events/${id}/registrations/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatePayload)
+      }).catch(error => {
+        console.error('❌ Network error during fetch:', error);
+        throw new Error(`Network error: Unable to connect to backend server. Please ensure the backend is running on http://localhost:4000`);
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Backend response error:', response.status, errorText);
+        throw new Error(`Failed to update registration status: ${response.status} - ${errorText}`);
+      }
+      
+      console.log('✅ Registration updated successfully');
+      
+      // Update local state
+      const next = subs.map((item, i) => i === index ? { 
+        ...item, 
+        status: "approved",
+        // Only add QR data for free events
+        ...(updatePayload.qrUrl && {
+          qrUrl: updatePayload.qrUrl,
+          qrCid: updatePayload.qrCid,
+          jsonUrl: updatePayload.jsonUrl,
+          jsonCid: updatePayload.jsonCid
+        })
+      } : item);
+      setSubs(next);
+      
+    } catch (error) {
+      console.error('Failed to approve registration:', error);
+      alert('Failed to approve registration. Please try again.');
+    }
+  }
+
+  async function reject(index: number) {
+    const s = subs[index];
+    if (!s) return;
+
+    try {
+      // Check if submission has backend ID
+      if (!s.id) {
+        throw new Error('This registration is missing its backend identifier. Please ensure the participant has completed their registration through the proper channels.');
+      }
+      
+      // Update submission status in backend
+      const response = await fetch(`
+https://evenntz.onrender.com/api
+/events/${id}/registrations/${s.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Backend response error:', response.status, errorText);
+        throw new Error(`Failed to update registration status: ${response.status} - ${errorText}`);
+      }
+      
+      // Update local state
+    const next = subs.map((item, i) => i === index ? { ...item, status: "rejected" } : item);
+    setSubs(next);
+      
+    } catch (error) {
+      console.error('Failed to reject registration:', error);
+      alert('Failed to reject registration. Please try again.');
+    }
+  }
+
+  function statusClasses(status: Submission["status"]) {
+    if (status === "approved") return "border-green-400 text-green-400";
+    if (status === "rejected") return "border-red-400 text-red-400";
+    return "border-yellow-400 text-yellow-400";
+  }
+
+  return (
+    <main className="mx-auto max-w-4xl px-4 py-12">
+      <div className="mb-6 flex items-center justify-between">
+        <Link href={`/events/${id}`} className="text-sm hover:underline">← Back to event</Link>
+        <div className="flex items-center gap-4">
+          <Link 
+            href={`/host/events/${id}/group`}
+            className="btn-secondary text-sm"
+          >
+            🛡️ Group Management
+          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight">Review registrations</h1>
+        </div>
+      </div>
+      
+
+
+      {subs.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-sm text-black/70 dark:text-white/70 mb-2">No registrations yet.</p>
+          <p className="text-xs text-black/50 dark:text-white/50">Registrations will appear here once participants sign up for your event.</p>
+        </div>
+      ) : (
+        <ul className="space-y-4">
+          {subs.map((s, idx) => (
+            <li key={idx} className="card p-4 space-y-3">
+              {/* Participant Information */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="text-sm space-y-1">
+                {Object.entries(s.values).map(([k, v]) => (
+                  <div key={k}><span className="font-medium">{k}:</span> {v}</div>
+                ))}
+                  </div>
+                                  <div className="text-xs text-foreground/60 space-y-1">
+                  <div>Registered: {new Date(s.at).toLocaleString()}</div>
+                  <div>Wallet: {s.address}</div>
+                </div>
+              </div>
+                
+                {/* Status and Actions */}
+              <div className="flex items-center gap-2">
+                  <span className={`text-xs rounded px-2 py-1 border ${statusClasses(s.status)}`}>
+                    {s.status}
+                  </span>
+                {s.status !== "approved" && (
+                    <button 
+                      onClick={() => approve(idx)} 
+                      className="btn-primary text-xs px-3 py-1"
+                    >
+                      Approve
+                    </button>
+                )}
+                {s.status !== "rejected" && (
+                    <button 
+                      onClick={() => reject(idx)} 
+                      className="btn-secondary text-xs px-3 py-1"
+                    >
+                      Reject
+                    </button>
+                )}
+              </div>
+              </div>
+              
+            </li>
+          ))}
+        </ul>
+      )}
+    </main>
+  );
+}
