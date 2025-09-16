@@ -49,9 +49,9 @@ export default function Testimonials() {
   );
 
   return (
-    <section className="py-16 sm:py-20 lg:py-24">
+    <section className="py-16 sm:py-20 lg:py-24" data-aos="fade-up">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12 sm:mb-16 fade-in">
+        <div className="text-center mb-12 sm:mb-16 fade-in" data-aos="fade-down">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 sm:mb-6">
             What Our Users Say
           </h2>
@@ -65,7 +65,8 @@ export default function Testimonials() {
             <div
               key={testimonial.id}
               className="card p-6 sm:p-8 group hover:scale-105 transition-all duration-300 slide-in"
-              style={{ animationDelay: `${index * 200}ms` }}
+              data-aos="fade-up"
+              data-aos-delay={index * 200}
             >
               <div className="flex items-start gap-4">
                 <img

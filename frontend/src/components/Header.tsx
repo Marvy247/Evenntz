@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import ThemeToggle from "./ThemeToggle";
 import { useState } from "react";
+import Logo from "./Logo";
 
 export default function Header() {
   const pathname = usePathname();
@@ -17,7 +18,7 @@ export default function Header() {
   const closeMenu = () => setIsMenuOpen(false);
 
   return (
-    <header className={`w-full glass-enhanced border-b border-foreground/10 sticky top-0 z-50 transition-all duration-300 ${isHostPage ? 'hidden lg:block' : ''}`}>
+    <header className={`w-full glass-enhanced border-b border-foreground/10 sticky top-0 z-50 transition-all duration-300 shadow-lg backdrop-blur-md bg-white/30 ${isHostPage ? 'hidden lg:block' : ''}`}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
@@ -26,10 +27,15 @@ export default function Header() {
             className="flex items-center gap-3 font-bold text-xl lg:text-2xl text-foreground hover:text-foreground/80 transition-all duration-300 hover:scale-105 group"
             onClick={closeMenu}
           >
-            <div className="w-4 h-4 lg:w-5 lg:h-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 group-hover:from-purple-600 group-hover:to-blue-500 transition-all duration-300 shadow-lg"></div>
-            <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Evenntz
-            </span>
+            <Logo />
+            <div className="flex flex-col leading-tight">
+              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                Evenntz
+              </span>
+              <span className="text-xs text-foreground/50 font-light -mt-1">
+                Your Event Companion
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Navigation */}
@@ -68,13 +74,13 @@ export default function Header() {
           {/* Mobile Menu Button */}
           <button
             onClick={toggleMenu}
-            className="lg:hidden p-2 rounded-lg bg-foreground/10 hover:bg-foreground/20 border border-foreground/20 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="lg:hidden p-3 rounded-xl bg-white/10 hover:bg-white/20 border border-foreground/30 hover:border-foreground/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 shadow-md hover:shadow-lg backdrop-blur-sm"
             aria-label="Toggle menu"
           >
             <div className="w-6 h-6 flex flex-col justify-center items-center">
-              <span className={`block w-5 h-0.5 bg-foreground transition-all duration-300 ${isMenuOpen ? 'rotate-45 translate-y-1' : '-translate-y-1'}`}></span>
-              <span className={`block w-5 h-0.5 bg-foreground transition-all duration-300 ${isMenuOpen ? 'opacity-0' : 'opacity-100'}`}></span>
-              <span className={`block w-5 h-0.5 bg-foreground transition-all duration-300 ${isMenuOpen ? '-rotate-45 -translate-y-1' : 'translate-y-1'}`}></span>
+              <span className={`block w-5 h-1 bg-black transition-all duration-300 ${isMenuOpen ? 'rotate-45 translate-y-1' : '-translate-y-1'}`}></span>
+              <span className={`block w-5 h-1 bg-black transition-all duration-300 ${isMenuOpen ? 'opacity-0' : 'opacity-100'}`}></span>
+              <span className={`block w-5 h-1 bg-black transition-all duration-300 ${isMenuOpen ? '-rotate-45 -translate-y-1' : 'translate-y-1'}`}></span>
             </div>
           </button>
         </div>

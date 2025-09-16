@@ -87,9 +87,9 @@ export default function Stats() {
   }, []);
 
   return (
-    <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-r from-primary/5 to-accent/5">
+    <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-r from-primary/5 to-accent/5" data-aos="fade-up">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12 sm:mb-16 fade-in">
+        <div className="text-center mb-12 sm:mb-16 fade-in" data-aos="fade-down">
           <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 sm:mb-6">
             Trusted Worldwide
           </h2>
@@ -103,7 +103,8 @@ export default function Stats() {
             <div
               key={stat.id}
               className="card p-6 sm:p-8 text-center group hover:scale-105 transition-all duration-300 slide-in"
-              style={{ animationDelay: `${index * 200}ms` }}
+              data-aos="fade-up"
+              data-aos-delay={index * 200}
             >
               <div className="w-16 h-16 sm:w-20 sm:h-20 glass rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 group-hover:scale-110 transition-transform text-foreground">
                 {stat.icon}
