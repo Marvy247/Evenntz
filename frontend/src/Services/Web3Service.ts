@@ -413,7 +413,7 @@ class Web3Service {
 
   // Read functions
   async getEventInfo(eventAddress: Address) {
-    const [eventName, eventType, ticketPrice] = await Promise.all([
+    const [eventName, eventType, ticketPrice, organizer] = await Promise.all([
       this.publicClient.readContract({
         address: eventAddress,
         abi: EVENT_IMPLEMENTATION_ABI,
@@ -428,13 +428,19 @@ class Web3Service {
         address: eventAddress,
         abi: EVENT_IMPLEMENTATION_ABI,
         functionName: 'ticketPrice'
+      }),
+      this.publicClient.readContract({
+        address: eventAddress,
+        abi: EVENT_IMPLEMENTATION_ABI,
+        functionName: 'owner'
       })
     ]);
 
     return {
       name: eventName,
-      type: eventType,
-      price: ticketPrice
+      eventType: eventType,
+      ticketPrice: ticketPrice,
+      organizer: organizer
     };
   }
 

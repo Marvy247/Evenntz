@@ -24,8 +24,8 @@ export default function EventTimeline({ events }: { events: EventItem[] }) {
       <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-foreground/20 via-foreground/10 to-transparent" />
       
       <div className="space-y-12">
-        {groups.map(([day, items]) => (
-          <section key={day} className="relative pl-12 fade-in">
+        {groups.map(([day, items], index) => (
+          <section key={`${day}-${index}`} className="relative pl-12 fade-in">
             {/* Date indicator */}
             <div className="absolute left-0 top-2 w-8 h-8 rounded-full glass flex items-center justify-center">
               <div className="w-3 h-3 rounded-full bg-foreground"></div>
@@ -96,6 +96,9 @@ export default function EventTimeline({ events }: { events: EventItem[] }) {
 
 function formatDay(day: string) {
   const d = new Date(day);
+  if (isNaN(d.getTime())) {
+    return day || "Invalid Date";
+  }
   const formatter = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" });
   const label = formatter.format(d);
   const today = new Date();
@@ -103,11 +106,11 @@ function formatDay(day: string) {
   const tomorrow = new Date();
   tomorrow.setDate(today.getDate() + 1);
   const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  
+
   let prefix = "";
   if (isToday) prefix = "Today";
   else if (isTomorrow) prefix = "Tomorrow";
-  
+
   return prefix ? `${prefix} • ${label}` : label;
 }
 

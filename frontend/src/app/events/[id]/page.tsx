@@ -88,7 +88,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const isHost = event?.organizer && event.organizer === address?.toLowerCase();
+  const isHost = event?.organizer && event.organizer.toLowerCase() === address?.toLowerCase();
 
   return (
     <main className="min-h-screen">
@@ -167,6 +167,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
                 
                 {/* Host Actions */}
+                {console.log('isHost:', isHost)}
                 {isHost && (
                   <div className="flex items-center gap-3">
                     {event.eventType === 2 && (

@@ -26,6 +26,13 @@ export type EventItem = {
   lat?: number;
   lng?: number;
   formSchema?: FormField[];
+  // Additional mapped properties
+  id: string;
+  isPaid: boolean;
+  price: string;
+  approvalNeeded: boolean;
+  hostAddress: string;
+  currency?: string;
 };
 
 export function useEvents() {
@@ -44,6 +51,7 @@ export function useEvents() {
         price: event.ticketPrice,
         approvalNeeded: event.eventType === EventType.APPROVAL,
         hostAddress: event.organizer,
+        organizer: event.organizer,
         blockchainEventAddress: event.eventAddress,
       })));
     } finally {
@@ -55,9 +63,14 @@ export function useEvents() {
     loadEvents();
   }, [loadEvents]);
 
+  const updateEvent = (id: string, updates: Partial<EventItem>) => {
+    setEvents(prev => prev.map(event => event.id === id ? { ...event, ...updates } : event));
+  };
+
   return {
     events,
     loading,
     loadEvents,
+    updateEvent,
   };
 }

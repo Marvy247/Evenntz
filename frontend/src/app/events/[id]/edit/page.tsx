@@ -21,7 +21,10 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
   const event = events.find((e) => e.id === id);
   const { address } = useAccount();
 
-  const isHost = event?.hostAddress && event.hostAddress === address?.toLowerCase();
+  const isHost = event?.organizer && event.organizer.toLowerCase() === address?.toLowerCase();
+  console.log('Edit page - event.organizer:', event?.organizer);
+  console.log('Edit page - address:', address);
+  console.log('Edit page - isHost:', isHost);
 
   const [name, setName] = useState("");
   const [bannerDataUrl, setBannerDataUrl] = useState<string>("");
@@ -92,7 +95,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
         bannerUrl,
         bannerCid,
         isPaid,
-        price: isPaid && price ? Number(price) : undefined,
+        price: isPaid ? price : undefined,
         currency: isPaid ? currency : undefined,
         approvalNeeded,
         date,
