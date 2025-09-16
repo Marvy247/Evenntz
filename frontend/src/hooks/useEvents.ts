@@ -14,7 +14,6 @@ export type EventItem = {
   eventType: EventType;
   ticketPrice: string;
   organizer: string;
-  active: boolean;
   bannerUrl: string; // gateway URL for the banner image
   bannerCid?: string; // optional raw CID
   date: string; // YYYY-MM-DD
@@ -33,6 +32,7 @@ export type EventItem = {
   approvalNeeded: boolean;
   hostAddress: string;
   currency?: string;
+  active: boolean;
 };
 
 export function useEvents() {
@@ -44,7 +44,7 @@ export function useEvents() {
       setLoading(true);
       const allEvents = await web3Service.getAllEvents();
       // @ts-ignore
-      setEvents(allEvents.map(event => ({
+      setEvents(allEvents.filter(event => event.active).map(event => ({
         ...event,
         id: event.eventAddress,
         isPaid: event.eventType === EventType.PAID,
@@ -53,6 +53,7 @@ export function useEvents() {
         hostAddress: event.organizer,
         organizer: event.organizer,
         blockchainEventAddress: event.eventAddress,
+        active: event.active,
       })));
     } finally {
       setLoading(false);
