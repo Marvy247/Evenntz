@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 import { useEvents } from "@/hooks/useEvents";
 import ImageDropzone from "@/components/ImageDropzone";
 import CustomDatePicker from "@/components/DatePicker";
@@ -12,6 +13,9 @@ import SimpleDatePicker from "@/components/SimpleDatePicker";
 import SimpleTimePicker from "@/components/SimpleTimePicker";
 import LocationMap from "@/components/LocationMap";
 import { uploadImageToIPFS } from "@/lib/ipfs";
+import SkeletonForm from "@/components/SkeletonForm";
+import { web3Service } from "@/Services/Web3Service";
+import { eventFactoryABI } from "../../../web3/constants";
 
 const LOCATIONS = [
   "Singapore",
@@ -40,30 +44,22 @@ const LOCATIONS = [
   "Worldwide",
 ];
 
+type TicketTier = {
+  name: string;
+  price: string;
+  currency: string;
+  quantity: string;
+};
+
 export default function HostPage() {
   const { isConnected, address } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const router = useRouter();
+  const { organization, loading: authLoading } = useAuth();
   const { addEvent } = useEvents();
-  const [orgExists, setOrgExists] = useState<boolean | null>(null);
   const [orgName, setOrgName] = useState("");
   const [orgEmail, setOrgEmail] = useState("");
   const [orgDescription, setOrgDescription] = useState("");
-  // Check if organization exists for connected wallet
-  async function checkOrganization() {
-    if (!address) return;
-    try {
-      const res = await fetch(`/api/organizations/${address.toLowerCase()}`);
-      setOrgExists(res.ok);
-    } catch {
-      setOrgExists(false);
-    }
-  }
-  
-  if (isConnected && orgExists === null) {
-    // fire and forget initial check
-    checkOrganization();
-  }
 
   async function registerOrganization(e: React.FormEvent) {
     e.preventDefault();
@@ -71,42 +67,66 @@ export default function HostPage() {
       alert('Connect wallet first');
       return;
     }
-    const payload = {
-      address: address.toLowerCase(),
-      name: orgName,
-      description: orgDescription,
-      email: orgEmail,
-    };
-    const message = JSON.stringify(payload);
-    const signature = await signMessageAsync({ message });
-    const res = await fetch('/api/organizations', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, signature })
-    });
-    if (!res.ok) {
-      alert('Failed to register organization');
-      return;
+    try {
+      const tx = await web3Service.getWalletClient().writeContract({
+        address: web3Service.getEventFactoryAddress(),
+        abi: eventFactoryABI.abi,
+        functionName: 'registerOrganization',
+        args: [orgName, orgDescription, ""],
+      });
+      await web3Service.getPublicClient().waitForTransactionReceipt({ hash: tx });
+    } catch (error) {
+      console.error("Failed to register organization", error);
+      alert("Failed to register organization");
     }
-    setOrgExists(true);
-    router.push('/host/dashboard');
   }
 
 
   const [name, setName] = useState("");
   const [bannerDataUrl, setBannerDataUrl] = useState("");
-  const [isPaid, setIsPaid] = useState(false);
-  const [price, setPrice] = useState<string>("");
-  const [currency, setCurrency] = useState<string>("SEP");
+  const [ticketTiers, setTicketTiers] = useState<TicketTier[]>([]);
   const [approvalNeeded, setApprovalNeeded] = useState(false);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState(LOCATIONS[0]);
-  const [organization, setOrganization] = useState("");
-  const [organizationDescription, setOrganizationDescription] = useState("");
+  const [venueName, setVenueName] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  
   const [eventDescription, setEventDescription] = useState("");
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+
+  function addTier() {
+    setTicketTiers([...ticketTiers, { name: '', price: '', currency: 'USD', quantity: '' }]);
+  }
+
+  function updateTier(index: number, field: keyof TicketTier, value: string) {
+    const newTiers = [...ticketTiers];
+    newTiers[index][field] = value;
+    setTicketTiers(newTiers);
+  }
+
+  function removeTier(index: number) {
+    const newTiers = [...ticketTiers];
+    newTiers.splice(index, 1);
+    setTicketTiers(newTiers);
+  }
+
+  function handleTags(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return;
+    const value = e.currentTarget.value;
+    if (!value.trim()) return;
+    setTags([...tags, value]);
+    e.currentTarget.value = "";
+  }
+
+  function removeTag(index: number) {
+    setTags(tags.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -114,51 +134,31 @@ export default function HostPage() {
       alert("Please connect your wallet to create events.");
       return;
     }
-    if (!bannerDataUrl) {
-      alert("Please add a banner image.");
-      return;
-    }
 
     try {
       setSubmitting(true);
 
-      const payload = {
-        name,
-        isPaid,
-        price: isPaid && price ? Number(price) : undefined,
-        currency: isPaid ? currency : undefined,
-        approvalNeeded,
-        date,
-        time,
-        location,
-        organization,
-        organizationDescription,
-        eventDescription,
-        lat: lat ? Number(lat) : undefined,
-        lng: lng ? Number(lng) : undefined,
-        hostAddress: address?.toLowerCase(),
-        ts: Date.now(),
-        status: 'draft' as const,
-      };
+      let eventType;
+      let ticketPrice = "0";
 
-      const msg = JSON.stringify(payload);
-      await signMessageAsync({ message: msg });
+      if (ticketTiers.length > 0) {
+        eventType = 1; // PAID
+        ticketPrice = ticketTiers[0].price;
+      } else if (approvalNeeded) {
+        eventType = 2; // APPROVAL
+      } else {
+        eventType = 0; // FREE
+      }
 
-      const { cid, url } = await uploadImageToIPFS(bannerDataUrl);
-
-      // Create event as draft via backend
-      const res = await fetch('/api/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          bannerUrl: url,
-          bannerCid: cid,
-        }),
+      const tx = await web3Service.getWalletClient().writeContract({
+        address: web3Service.getEventFactoryAddress(),
+        abi: eventFactoryABI.abi,
+        functionName: 'createEvent',
+        args: [name, eventType, web3Service.parseEther(ticketPrice)],
       });
-      if (!res.ok) throw new Error('Failed to create event');
-      const created = await res.json();
-      router.push(`/host/${address?.toLowerCase()}`);
+      await web3Service.getPublicClient().waitForTransactionReceipt({ hash: tx });
+
+      router.push('/host/dashboard');
     } catch (err: any) {
       alert(err?.message || "Failed to create event");
     } finally {
@@ -171,11 +171,17 @@ export default function HostPage() {
     bannerDataUrl.trim().length > 0 &&
     date.trim().length > 0 &&
     time.trim().length > 0 &&
-    location.trim().length > 0;
+    endDate.trim().length > 0 &&
+    endTime.trim().length > 0 &&
+    location.trim().length > 0 &&
+    venueName.trim().length > 0 &&
+    venueAddress.trim().length > 0;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">Become a host</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">
+        {organization ? "Create a new event" : "Become a host"}
+      </h1>
 
       {!isConnected && (
         <div className="mb-6">
@@ -183,7 +189,11 @@ export default function HostPage() {
         </div>
       )}
 
-      {isConnected && orgExists === false && (
+      {isConnected && authLoading && (
+        <SkeletonForm />
+      )}
+
+      {isConnected && !authLoading && !organization && (
         <form onSubmit={registerOrganization} className="space-y-6">
           <div className="rounded-md border border-black/10 dark:border-white/10 p-4">
             <h2 className="text-lg font-medium mb-2">Register your organization</h2>
@@ -206,100 +216,143 @@ export default function HostPage() {
         </form>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="space-y-2">
-          <label className="block text-sm font-medium" htmlFor="name">Event name</label>
-          <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20" placeholder="e.g. evenntz Launch Party" required />
-        </div>
-
-        <ImageDropzone value={bannerDataUrl} onChange={setBannerDataUrl} label="Event banner image" />
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium" htmlFor="org">Host organization</label>
-          <input id="org" type="text" value={organization} onChange={(e) => setOrganization(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20" placeholder="Organization name" />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium" htmlFor="orgdesc">Organization description</label>
-          <textarea id="orgdesc" value={organizationDescription} onChange={(e) => setOrganizationDescription(e.target.value)} rows={3} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20" placeholder="Brief description of the organization" />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">Event description (Markdown)</label>
-          <textarea value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} rows={6} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none" placeholder="Write details here..." />
-        </div>
-
-        <div className="space-y-2">
-          <label className="block text-sm font-medium" htmlFor="location">Location</label>
-          <select id="location" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20">
-            {LOCATIONS.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {isConnected && !authLoading && organization && (
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <SimpleDatePicker 
-              value={date} 
-              onChange={setDate} 
-              label="Event Date" 
-              required 
-            />
+            <label className="block text-sm font-medium" htmlFor="name">Event name</label>
+            <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20" placeholder="e.g. evenntz Launch Party" required />
           </div>
+
+          <ImageDropzone value={bannerDataUrl} onChange={setBannerDataUrl} label="Event banner image" />
+
+          
+
           <div className="space-y-2">
-            <SimpleTimePicker 
-              value={time} 
-              onChange={setTime} 
-              label="Event Time" 
-              required 
-            />
+            <label className="block text-sm font-medium">Event description (Markdown)</label>
+            <textarea value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} rows={6} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none" placeholder="Write details here..." />
           </div>
-        </div>
 
-        <LocationMap 
-          lat={lat ? Number(lat) : undefined}
-          lng={lng ? Number(lng) : undefined}
-          onLocationChange={(lat, lng) => {
-            setLat(lat.toString());
-            setLng(lng.toString());
-          }}
-        />
-
-        <div className="space-y-2">
-          <span className="block text-sm font-medium">Pricing</span>
-          <div className="flex items-center gap-4">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="radio" name="pricing" checked={!isPaid} onChange={() => setIsPaid(false)} />
-              Free
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input type="radio" name="pricing" checked={isPaid} onChange={() => setIsPaid(true)} />
-              Paid
-            </label>
-          </div>
-          {isPaid && (
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price" className="col-span-2 rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" />
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm">
-                <option value="USD">USD</option>
-                <option value="INR">INR</option>
-                <option value="THB">THB</option>
-                <option value="EUR">EUR</option>
-              </select>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Tags</label>
+            <div className="flex items-center flex-wrap gap-2">
+              {tags.map((tag, index) => (
+                <div key={index} className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 rounded-full px-3 py-1">
+                  <span>{tag}</span>
+                  <button type="button" onClick={() => removeTag(index)} className="text-red-500">x</button>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+            <input onKeyDown={handleTags} type="text" placeholder="Add a tag and press Enter" className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" />
+          </div>
 
-        <div className="space-y-2">
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={approvalNeeded} onChange={(e) => setApprovalNeeded(e.target.checked)} />
-            Approval required
-          </label>
-        </div>
+          <div className="space-y-4 p-4 border border-black/10 dark:border-white/10 rounded-md">
+              <h3 className="text-lg font-medium">Venue</h3>
+              <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="venueName">Venue Name</label>
+                  <input id="venueName" type="text" value={venueName} onChange={(e) => setVenueName(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" required />
+              </div>
+              <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="venueAddress">Venue Address</label>
+                  <textarea id="venueAddress" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} rows={3} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" required />
+              </div>
+              <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="location">City</label>
+                  <select id="location" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20">
+                      {LOCATIONS.map((loc) => (<option key={loc} value={loc}>{loc}</option>))}
+                  </select>
+              </div>
+              <LocationMap 
+                  lat={lat ? Number(lat) : undefined}
+                  lng={lng ? Number(lng) : undefined}
+                  onLocationChange={(lat, lng) => {
+                      setLat(lat.toString());
+                      setLng(lng.toString());
+                  }}
+              />
+          </div>
 
-        <div>
-          <button type="submit" disabled={!isValid || submitting} className="inline-flex items-center rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50">{submitting ? "Creating..." : "Create event"}</button>
-        </div>
-      </form>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <SimpleDatePicker 
+                value={date} 
+                onChange={setDate} 
+                label="Start Date" 
+                required 
+              />
+            </div>
+            <div className="space-y-2">
+              <SimpleTimePicker 
+                value={time} 
+                onChange={setTime} 
+                label="Start Time" 
+                required 
+              />
+            </div>
+            <div className="space-y-2">
+              <SimpleDatePicker 
+                value={endDate} 
+                onChange={setEndDate} 
+                label="End Date" 
+                required 
+              />
+            </div>
+            <div className="space-y-2">
+              <SimpleTimePicker 
+                value={endTime} 
+                onChange={setEndTime} 
+                label="End Time" 
+                required 
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Ticket Tiers</h3>
+            {ticketTiers.map((tier, index) => (
+              <div key={index} className="p-4 border border-black/10 dark:border-white/10 rounded-md space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className='sm:col-span-2'>
+                    <label className="block text-sm font-medium">Tier Name</label>
+                    <input type="text" value={tier.name} onChange={(e) => updateTier(index, 'name', e.target.value)} placeholder="e.g., General Admission" className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">Quantity</label>
+                    <input type="number" value={tier.quantity} onChange={(e) => updateTier(index, 'quantity', e.target.value)} placeholder="100" className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium">Price</label>
+                    <input type="number" min="0" step="0.01" value={tier.price} onChange={(e) => updateTier(index, 'price', e.target.value)} placeholder="25.00" className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">Currency</label>
+                    <select value={tier.currency} onChange={(e) => updateTier(index, 'currency', e.target.value)} className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm">
+                      <option value="USD">USD</option>
+                      <option value="INR">INR</option>
+                      <option value="THB">THB</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="button" onClick={() => removeTier(index)} className="text-red-500 text-sm">Remove Tier</button>
+              </div>
+            ))}
+            <button type="button" onClick={addTier} className="inline-flex items-center rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5">Add Ticket Tier</button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={approvalNeeded} onChange={(e) => setApprovalNeeded(e.target.checked)} />
+              Approval required
+            </label>
+          </div>
+
+          <div>
+            <button type="submit" disabled={!isValid || submitting} className="inline-flex items-center rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50">{submitting ? "Creating..." : "Create event"}</button>
+          </div>
+        </form>
+      )}
     </main>
   );
 }

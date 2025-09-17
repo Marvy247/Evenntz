@@ -25,6 +25,11 @@ export type EventItem = {
   lat?: number;
   lng?: number;
   formSchema?: FormField[];
+  analytics?: {
+    totalTicketsSold: number;
+    checkIns: number;
+    totalRevenue: string;
+  };
   // Additional mapped properties
   id: string;
   isPaid: boolean;
@@ -43,18 +48,27 @@ export function useEvents() {
     try {
       setLoading(true);
       const allEvents = await web3Service.getAllEvents();
-      // @ts-ignore
-      setEvents(allEvents.filter(event => event.active).map(event => ({
-        ...event,
-        id: event.eventAddress,
-        isPaid: event.eventType === EventType.PAID,
-        price: event.ticketPrice,
-        approvalNeeded: event.eventType === EventType.APPROVAL,
-        hostAddress: event.organizer,
-        organizer: event.organizer,
-        blockchainEventAddress: event.eventAddress,
-        active: event.active,
-      })));
+
+      const eventsWithAnalytics = await Promise.all(
+        // @ts-ignore
+        allEvents.filter(event => event.active).map(async (event) => {
+          const analytics = await web3Service.getEventAnalytics(event.eventAddress);
+          return {
+            ...event,
+            id: event.eventAddress,
+            isPaid: event.eventType === EventType.PAID,
+            price: event.ticketPrice,
+            approvalNeeded: event.eventType === EventType.APPROVAL,
+            hostAddress: event.organizer,
+            organizer: event.organizer,
+            blockchainEventAddress: event.eventAddress,
+            active: event.active,
+            analytics,
+          };
+        })
+      );
+
+      setEvents(eventsWithAnalytics);
     } finally {
       setLoading(false);
     }

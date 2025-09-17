@@ -42,6 +42,7 @@ export interface CreateEventParams {
   name: string;
   eventType: EventType;
   ticketPrice: string; // in wei as string
+  maxTickets: string; // Add this
 }
 
 export interface RegisterOrganizationParams {
@@ -152,13 +153,13 @@ class Web3Service {
       throw new Error('Web3Service not initialized or wallet not connected');
     }
 
-    const { name, eventType, ticketPrice } = params;
+    const { name, eventType, ticketPrice, maxTickets } = params;
 
     const transactionHash = await this.walletClient.writeContract({
         address: this.eventFactoryAddress!,
         abi: EVENT_FACTORY_ABI,
         functionName: 'createEvent',
-        args: [name, eventType, BigInt(ticketPrice)],
+        args: [name, eventType, BigInt(ticketPrice), BigInt(maxTickets)],
         account: this.walletClient.account,
     });
 
@@ -444,6 +445,36 @@ class Web3Service {
     };
   }
 
+  async getEventAnalytics(eventAddress: Address) {
+    const ticketNFTAddress = await this.getTicketNFTAddress(eventAddress);
+
+    const [totalTicketsSold, checkIns, ticketPrice] = await Promise.all([
+      this.publicClient.readContract({
+        address: ticketNFTAddress,
+        abi: EVENT_TICKET_ABI,
+        functionName: 'nextTokenId'
+      }),
+      this.publicClient.readContract({
+        address: ticketNFTAddress,
+        abi: EVENT_TICKET_ABI,
+        functionName: 'getBurnedTicketsCount'
+      }),
+      this.publicClient.readContract({
+        address: eventAddress,
+        abi: EVENT_IMPLEMENTATION_ABI,
+        functionName: 'ticketPrice'
+      })
+    ]);
+
+    const totalRevenue = BigInt(totalTicketsSold) * BigInt(ticketPrice);
+
+    return {
+      totalTicketsSold: Number(totalTicketsSold),
+      checkIns: Number(checkIns),
+      totalRevenue: formatEther(totalRevenue)
+    };
+  }
+
   async getTicketOwner(eventAddress: Address, tokenId: number): Promise<Address> {
     const ticketNFTAddress = await this.getTicketNFTAddress(eventAddress);
     
@@ -455,6 +486,19 @@ class Web3Service {
     });
 
     return owner as Address;
+  }
+
+  async getTicketTokenURI(eventAddress: Address, tokenId: number): Promise<string> {
+    const ticketNFTAddress = await this.getTicketNFTAddress(eventAddress);
+    
+    const tokenURI = await this.publicClient.readContract({
+      address: ticketNFTAddress,
+      abi: EVENT_TICKET_ABI,
+      functionName: 'tokenURI',
+      args: [BigInt(tokenId)]
+    });
+
+    return tokenURI as string;
   }
 
   async getResaleInfo(eventAddress: Address, tokenId: number) {

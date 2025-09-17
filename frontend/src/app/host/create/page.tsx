@@ -17,6 +17,7 @@ export default function CreateEventPage() {
   const [name, setName] = useState("");
   const [isPaid, setIsPaid] = useState(false);
   const [price, setPrice] = useState<string>("");
+  const [maxTickets, setMaxTickets] = useState<string>("");
   const [approvalNeeded, setApprovalNeeded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function CreateEventPage() {
         name,
         eventType,
         ticketPrice: isPaid ? web3Service.parseEther(price) : "0",
+        maxTickets: maxTickets,
       });
       
       router.push('/host/dashboard');
@@ -117,6 +119,21 @@ export default function CreateEventPage() {
               onChange={(e) => setName(e.target.value)} 
               className="input text-lg" 
               placeholder="Enter your event name"
+              required 
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-lg font-medium text-foreground" htmlFor="maxTickets">
+              Number of Tickets to be Sold *
+            </label>
+            <input 
+              id="maxTickets" 
+              type="number" 
+              value={maxTickets} 
+              onChange={(e) => setMaxTickets(e.target.value)} 
+              className="input text-lg" 
+              placeholder="Enter the number of tickets"
               required 
             />
           </div>

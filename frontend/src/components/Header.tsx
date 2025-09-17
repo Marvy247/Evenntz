@@ -55,10 +55,10 @@ export default function Header() {
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-600 group-hover:w-full transition-all duration-300"></span>
             </Link>
             <Link
-              href="/host/signin"
+              href="/host"
               className="text-sm font-medium text-foreground/70 hover:text-foreground transition-all duration-300 hover:scale-105 relative group"
             >
-              Host Events
+              Create Event
               <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-600 group-hover:w-full transition-all duration-300"></span>
             </Link>
           </nav>
@@ -103,11 +103,11 @@ export default function Header() {
               Explore Events
             </Link>
             <Link
-              href="/host/signin"
+              href="/host"
               className="block px-4 py-3 text-base font-medium text-foreground/70 hover:text-foreground hover:bg-foreground/5 rounded-lg transition-all duration-300"
               onClick={closeMenu}
             >
-              Host Events
+              Create Event
             </Link>
             <div className="px-4 py-2">
               <ThemeToggle />

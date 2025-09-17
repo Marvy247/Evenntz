@@ -19,6 +19,36 @@ export default function DashboardPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date");
 
+  // Export functionality
+  const exportEventsToCSV = () => {
+    const headers = ["Name", "Date", "Time", "Location", "Type", "Organization", "Tickets Sold", "Revenue"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredEvents.map(event => {
+        return [
+          `"${event.name}"`, 
+          event.date,
+          event.time,
+          `"${event.location}"`, 
+          event.eventType === 1 ? "Paid" : event.eventType === 2 ? "Approval Required" : "Free",
+          `"${event.organization || ""}"`, 
+          event.analytics?.totalTicketsSold || 0,
+          event.analytics?.totalRevenue || 0
+        ].join(",");
+      })
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `events-report-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Deactivate event hooks
   const { writeContract: writeDeactivateContract, data: deactivateHash, error: deactivateError, isPending: deactivatePending } = useWriteContract();
   const { data: deactivateTxReceipt, isLoading: deactivateTxLoading } = useWaitForTransactionReceipt({
@@ -104,8 +134,8 @@ export default function DashboardPage() {
       <div className="mb-12">
         <OrganizerStats
           eventsCount={myEvents.length}
-          totalTicketsSold={42} // Placeholder - would be fetched from backend/blockchain
-          totalRevenue={1.5} // Placeholder - would be fetched from backend/blockchain
+          totalTicketsSold={myEvents.reduce((acc, event) => acc + (event.analytics?.totalTicketsSold || 0), 0)}
+          totalRevenue={myEvents.reduce((acc, event) => acc + parseFloat(event.analytics?.totalRevenue || '0'), 0)}
           pendingApprovals={3} // Placeholder - would be fetched from backend
         />
       </div>
@@ -117,6 +147,70 @@ export default function DashboardPage() {
           <EventTimeline events={upcomingEvents} />
         </div>
       )}
+
+      {/* Organization Profile Section */}
+      <div className="mb-12">
+        <h2 className="text-2xl font-semibold text-foreground mb-6">Organization Profile</h2>
+        <div className="card p-6">
+          <div className="flex items-start gap-6">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-r from-primary to-accent flex items-center justify-center text-white text-2xl font-bold">
+              {address ? address.slice(0, 2).toUpperCase() : "O"}
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-foreground mb-2">Your Organization</h3>
+              <p className="text-sm text-foreground/70 mb-4">
+                Manage your organization profile and settings. This information will be displayed on your event pages.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/70 mb-1">Organization Name</label>
+                  <input
+                    type="text"
+                    placeholder="Enter organization name"
+                    className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    defaultValue="Your Organization" // Placeholder
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/70 mb-1">Website</label>
+                  <input
+                    type="url"
+                    placeholder="https://yourwebsite.com"
+                    className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    defaultValue="" // Placeholder
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/70 mb-1">Contact Email</label>
+                  <input
+                    type="email"
+                    placeholder="contact@yourorg.com"
+                    className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    defaultValue="" // Placeholder
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground/70 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    placeholder="+1 (555) 123-4567"
+                    className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    defaultValue="" // Placeholder
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button className="btn-primary text-sm px-4 py-2">
+                  Save Changes
+                </button>
+                <button className="btn-secondary text-sm px-4 py-2">
+                  Upload Logo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Notifications/Alerts Section */}
       <div className="mb-12">
@@ -183,7 +277,7 @@ export default function DashboardPage() {
 
           {/* Low Ticket Sales Alert */}
           {myEvents.some(event => {
-            const ticketsSold = Math.floor(Math.random() * 50) + 10; // Placeholder
+            const ticketsSold = event.analytics?.totalTicketsSold || 0;
             return ticketsSold < 20 && new Date(`${event.date}T${event.time}`) > new Date();
           }) && (
             <div className="card p-4 border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20 fade-in">
@@ -240,9 +334,18 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-foreground">Your Events ({filteredEvents.length})</h2>
-            <Link href="/host" className="btn-primary">
-              Create New Event
-            </Link>
+            <div className="flex gap-3">
+              <button
+                onClick={exportEventsToCSV}
+                className="btn-secondary text-sm px-4 py-2"
+                disabled={filteredEvents.length === 0}
+              >
+                📊 Export Report
+              </button>
+              <Link href="/host" className="btn-primary">
+                Create New Event
+              </Link>
+            </div>
           </div>
 
           {/* Search and Filter Controls */}
@@ -310,13 +413,12 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid gap-6">
-            {myEvents.map((event) => {
-              // Placeholder analytics data - would be fetched from backend/blockchain
+            {filteredEvents.map((event) => {
               const analytics = {
-                ticketsSold: Math.floor(Math.random() * 50) + 10,
-                totalCapacity: 100,
-                revenue: event.isPaid ? parseFloat((Math.random() * 2).toFixed(2)) : 0,
-                checkIns: Math.floor(Math.random() * 30) + 5,
+                ticketsSold: event.analytics?.totalTicketsSold || 0,
+                totalCapacity: 100, // Placeholder
+                revenue: parseFloat(event.analytics?.totalRevenue || '0'),
+                checkIns: event.analytics?.checkIns || 0,
               };
 
               return (
@@ -337,7 +439,7 @@ export default function DashboardPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-xl font-bold text-foreground">{event.name}</h3>
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium glass border ${
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium glass border ${ 
                               event.eventType === 1 ? 'border-foreground/20 text-foreground' : 'border-foreground/10 text-foreground/70'
                             }`}>
                               {event.eventType === 1 ? 'Paid Event' : event.eventType === 2 ? 'Approval Required' : 'Free Event'}

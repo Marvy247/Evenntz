@@ -1,4 +1,4 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { getDefaultConfig, metaMaskWallet, walletConnectWallet } from '@rainbow-me/rainbowkit';
 import { defineChain } from 'viem';
 
 // Define Sepolia Testnet chain
@@ -31,6 +31,10 @@ export const config = getDefaultConfig({
   appName: 'Evenntz',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID',
   chains: [SepoliaTestnet],
+  wallets: [
+    metaMaskWallet,
+    walletConnectWallet,
+  ],
   ssr: true,
   // Performance optimizations
   batch: {

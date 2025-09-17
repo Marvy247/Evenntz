@@ -15,11 +15,7 @@ export default function HostDashboardPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editWebsite, setEditWebsite] = useState("");
-  const [editSubmitting, setEditSubmitting] = useState(false);
+  
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -47,10 +43,7 @@ export default function HostDashboardPage() {
 
     if (organization) {
       loadEvents();
-      // Initialize edit fields with current organization data
-      setEditName(organization.name || "");
-      setEditDescription(organization.description || "");
-      setEditWebsite(organization.website || "");
+      
     }
   }, [organization]);
 
@@ -66,38 +59,7 @@ export default function HostDashboardPage() {
     return null; // Will redirect to signin
   }
 
-  async function handleEditSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!organization) return;
-
-    try {
-      setEditSubmitting(true);
-      // Call API to update organization details
-      const res = await fetch(`/api/organizations/${organization.address}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editName,
-          description: editDescription,
-          website: editWebsite,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to update organization');
-      }
-
-      // Optionally, refresh organization data or update context
-      // For now, just exit editing mode
-      setEditing(false);
-      // Reload page or refetch organization data if needed
-      router.refresh();
-    } catch (error: any) {
-      alert(error.message || 'Failed to update organization');
-    } finally {
-      setEditSubmitting(false);
-    }
-  }
+  
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-4 lg:py-12">
@@ -108,7 +70,7 @@ export default function HostDashboardPage() {
             <p className="text-foreground/60">Manage your events and organization</p>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/host/create" className="btn-primary flex items-center gap-2 px-4 py-2">
+            <Link href="/host" className="btn-primary flex items-center gap-2 px-4 py-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
@@ -121,90 +83,31 @@ export default function HostDashboardPage() {
       <div className="mb-8 card p-6 fade-in">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-foreground">Organization Details</h2>
-          <button
-            className="btn-secondary text-sm"
-            onClick={() => setEditing(!editing)}
-          >
-            {editing ? "Cancel" : "Edit"}
-          </button>
+          
         </div>
         <div className="space-y-3">
-          {!editing ? (
-            <>
-              <div>
-                <p className="text-lg font-medium text-foreground">{organization?.name}</p>
-                {organization?.description && (
-                  <p className="text-foreground/70 leading-relaxed">{organization.description}</p>
-                )}
+          <div>
+            <p className="text-lg font-medium text-foreground">{organization?.name}</p>
+            {organization?.description && (
+              <p className="text-foreground/70 leading-relaxed">{organization.description}</p>
+            )}
+          </div>
+          {organization?.website && (
+            <div className="pt-2 border-t border-foreground/10">
+              <a href={organization.website} target="_blank" rel="noreferrer" className="text-sm text-blue-500 hover:underline">
+                {organization.website}
+              </a>
+            </div>
+          )}
+          {organization?.address && (
+            <div className="pt-2 border-t border-foreground/10">
+              <div className="flex items-center gap-2 text-sm text-foreground/60">
+                <span className="font-medium">Wallet Address:</span>
+                <span className="font-mono bg-foreground/5 px-2 py-1 rounded">
+                  {organization.address}
+                </span>
               </div>
-              {organization?.website && (
-                <div className="pt-2 border-t border-foreground/10">
-                  <a href={organization.website} target="_blank" rel="noreferrer" className="text-sm text-blue-500 hover:underline">
-                    {organization.website}
-                  </a>
-                </div>
-              )}
-              {organization?.address && (
-                <div className="pt-2 border-t border-foreground/10">
-                  <div className="flex items-center gap-2 text-sm text-foreground/60">
-                    <span className="font-medium">Wallet Address:</span>
-                    <span className="font-mono bg-foreground/5 px-2 py-1 rounded">
-                      {organization.address}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground" htmlFor="orgName">Organization Name</label>
-                <input
-                  id="orgName"
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground" htmlFor="orgDescription">Description</label>
-                <textarea
-                  id="orgDescription"
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground" htmlFor="orgWebsite">Website</label>
-                <input
-                  id="orgWebsite"
-                  type="url"
-                  value={editWebsite}
-                  onChange={(e) => setEditWebsite(e.target.value)}
-                  className="w-full rounded-md border border-black/10 dark:border-white/10 bg-transparent px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="flex justify-end gap-4">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setEditing(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={editSubmitting}
-                >
-                  {editSubmitting ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </form>
+            </div>
           )}
         </div>
       </div>
@@ -213,7 +116,7 @@ export default function HostDashboardPage() {
         <div className="text-center py-16 card fade-in">
           <h3 className="text-xl font-semibold text-foreground mb-2">No events yet</h3>
           <p className="text-foreground/60 mb-6">Create your first event to get started</p>
-          <Link href="/host/create" className="btn-primary">
+          <Link href="/host" className="btn-primary">
             Create your first event
           </Link>
         </div>
