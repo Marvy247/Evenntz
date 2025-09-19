@@ -133,10 +133,56 @@ export default function HostPage() {
     if (!isConnected) {
       alert("Please connect your wallet to create events.");
       return;
+    }    if (!isValid) {
+      alert("Please fill all the required fields.");
+      return;
+    }
+
+    if (new Date(date) < new Date()) {
+      alert("Start date must be in the future.");
+      return;
+    }
+
+    if (new Date(endDate) < new Date(date)) {
+      alert("End date must be after the start date.");
+      return;
+    }
+
+    if (ticketTiers.length > 0 && !ticketTiers.every(tier => tier.name && tier.price && tier.quantity)) {
+      alert("Please fill all the fields for each ticket tier.");
+      return;
+    }
+
+    if (ticketTiers.length > 0 && ticketTiers.some(tier => Number(tier.price) < 0 || Number(tier.quantity) < 0)) {
+      alert("Ticket price and quantity cannot be negative.");
+      return;
+    }
+
+    if (!lat || !lng) {
+      alert("Please set the location on the map.");
+      return;
+    }
+
+    if (!bannerDataUrl) {
+      alert("Please upload a banner image.");
+      return;
     }
 
     try {
       setSubmitting(true);
+
+      let bannerCid = "";
+      if (bannerDataUrl) {
+        try {
+          const { cid } = await uploadImageToIPFS(bannerDataUrl);
+          bannerCid = cid;
+        } catch (error) {
+          console.error("Failed to upload banner to IPFS", error);
+          alert("Failed to upload banner to IPFS");
+          setSubmitting(false);
+          return;
+        }
+      }
 
       let eventType;
       let ticketPrice = "0";
@@ -150,13 +196,44 @@ export default function HostPage() {
         eventType = 0; // FREE
       }
 
+      const maxTickets = ticketTiers.reduce((acc, tier) => acc + Number(tier.quantity), 0);
+
       const tx = await web3Service.getWalletClient().writeContract({
         address: web3Service.getEventFactoryAddress(),
         abi: eventFactoryABI.abi,
         functionName: 'createEvent',
-        args: [name, eventType, web3Service.parseEther(ticketPrice)],
+        args: [name, eventType, web3Service.parseEther(ticketPrice), maxTickets],
       });
-      await web3Service.getPublicClient().waitForTransactionReceipt({ hash: tx });
+      const receipt = await web3Service.getPublicClient().waitForTransactionReceipt({ hash: tx });
+
+      const eventResponse = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          eventDescription,
+          bannerCid,
+          date,
+          time,
+          endDate,
+          endTime,
+          location,
+          venueName,
+          venueAddress,
+          lat,
+          lng,
+          tags,
+          ticketTiers,
+          approvalNeeded,
+          organizationId: organization.id,
+          blockchainEventAddress: receipt.contractAddress
+        }),
+      });
+
+      if (!eventResponse.ok) {
+        await web3Service.deactivateEvent(receipt.contractAddress!);
+        throw new Error("Failed to save event to database, blockchain event has been deactivated");
+      }
 
       router.push('/host/dashboard');
     } catch (err: any) {
@@ -224,6 +301,31 @@ export default function HostPage() {
           </div>
 
           <ImageDropzone value={bannerDataUrl} onChange={setBannerDataUrl} label="Event banner image" />
+
+          <div className="flex items-center gap-2 mb-4">
+            <input type="checkbox" id="customOrg" />
+            <label htmlFor="customOrg" className="text-sm">Use custom organization details for this event</label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground/70 mb-1">Organization Name</label>
+              <input
+                type="text"
+                placeholder="Enter organization name"
+                className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                defaultValue={organization?.name || ""} // Placeholder
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground/70 mb-1">Organization Description</label>
+              <textarea
+                rows={3}
+                placeholder="Enter organization description"
+                className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                defaultValue={organization?.description || ""} // Placeholder
+              />
+            </div>
+          </div>
 
           
 
@@ -348,8 +450,23 @@ export default function HostPage() {
             </label>
           </div>
 
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">Status</label>
+            <div className="flex gap-4">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="status" value="published" checked={true} />
+                Published
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="status" value="draft" />
+                Draft
+              </label>
+            </div>
+          </div>
+
           <div>
             <button type="submit" disabled={!isValid || submitting} className="inline-flex items-center rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50">{submitting ? "Creating..." : "Create event"}</button>
+            <button type="button" disabled={!isValid || submitting} className="inline-flex items-center rounded-md border border-black/10 dark:border-white/10 px-4 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50">Preview Event</button>
           </div>
         </form>
       )}

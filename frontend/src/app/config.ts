@@ -1,4 +1,5 @@
-import { getDefaultConfig, metaMaskWallet, walletConnectWallet } from '@rainbow-me/rainbowkit';
+import { getDefaultWallets } from '@rainbow-me/rainbowkit';
+import { createConfig, http } from 'wagmi';
 import { defineChain } from 'viem';
 
 // Define Sepolia Testnet chain
@@ -27,14 +28,23 @@ const SepoliaTestnet = defineChain({
   testnet: true,
 });
 
-export const config = getDefaultConfig({
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID';
+
+const { connectors: defaultConnectors } = getDefaultWallets({
   appName: 'Evenntz',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID',
+  projectId,
+});
+
+const connectors = defaultConnectors.filter((connector) => {
+  return !(connector.rdns && connector.rdns.includes('com.brave.wallet'));
+});
+
+export const config = createConfig({
   chains: [SepoliaTestnet],
-  wallets: [
-    metaMaskWallet,
-    walletConnectWallet,
-  ],
+  transports: {
+    [SepoliaTestnet.id]: http(),
+  },
+  connectors,
   ssr: true,
   // Performance optimizations
   batch: {
@@ -44,7 +54,4 @@ export const config = getDefaultConfig({
   },
   // Reduce polling frequency
   pollingInterval: 4000, // 4 seconds instead of default 4 seconds
-  // Disable some features for better performance
-  enableNetworkSwitching: false,
-  enableAccountBalance: false,
 });

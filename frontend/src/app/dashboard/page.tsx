@@ -1,5 +1,7 @@
 "use client";
 
+import { useAuth } from "@/hooks/useAuth";
+
 import { useAccount } from "wagmi";
 import { useEvents } from "@/hooks/useEvents";
 import Link from "next/link";
@@ -12,56 +14,60 @@ import EventTimeline from "@/components/EventTimeline";
 import OrganizerStats from "@/components/OrganizerStats";
 
 export default function DashboardPage() {
-  const { address } = useAccount();
-  const { events, loadEvents } = useEvents();
-  const [deactivateTxHash, setDeactivateTxHash] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [filterType, setFilterType] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("date");
-
-  // Export functionality
-  const exportEventsToCSV = () => {
-    const headers = ["Name", "Date", "Time", "Location", "Type", "Organization", "Tickets Sold", "Revenue"];
-    const csvContent = [
-      headers.join(","),
-      ...filteredEvents.map(event => {
-        return [
-          `"${event.name}"`, 
-          event.date,
-          event.time,
-          `"${event.location}"`, 
-          event.eventType === 1 ? "Paid" : event.eventType === 2 ? "Approval Required" : "Free",
-          `"${event.organization || ""}"`, 
-          event.analytics?.totalTicketsSold || 0,
-          event.analytics?.totalRevenue || 0
-        ].join(",");
-      })
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `events-report-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Deactivate event hooks
-  const { writeContract: writeDeactivateContract, data: deactivateHash, error: deactivateError, isPending: deactivatePending } = useWriteContract();
-  const { data: deactivateTxReceipt, isLoading: deactivateTxLoading } = useWaitForTransactionReceipt({
-    hash: deactivateHash,
-  });
-
-  useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
-
-  // Filter events where user is the organizer
-  const myEvents = events.filter(event => event.organizer && event.organizer.toLowerCase() === address?.toLowerCase());
-
+    const { organization, isAuthenticated, loading: authLoading } = useAuth();
+    const { address } = useAccount();
+    const { events, loadEvents } = useEvents();
+    const [deactivateTxHash, setDeactivateTxHash] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState<string>("");
+    const [filterType, setFilterType] = useState<string>("all");
+    const [sortBy, setSortBy] = useState<string>("date");
+  
+    // Export functionality
+    const exportEventsToCSV = () => {
+      const headers = ["Name", "Date", "Time", "Location", "Type", "Organization", "Tickets Sold", "Revenue"];
+      const csvContent = [
+        headers.join(","),
+        ...filteredEvents.map(event => {
+          return [
+            `"${event.name}"`,
+            event.date,
+            event.time,
+            `"${event.location}"`,
+            event.eventType === 1 ? "Paid" : event.eventType === 2 ? "Approval Required" : "Free",
+            `"${event.organization || ""}"`,
+            event.analytics?.totalTicketsSold || 0,
+            event.analytics?.totalRevenue || 0
+          ].join(",");
+        })
+      ].join("\n");
+  
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `events-report-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+  
+    // Deactivate event hooks
+    const { writeContract: writeDeactivateContract, data: deactivateHash, error: deactivateError, isPending: deactivatePending } = useWriteContract();
+    const { data: deactivateTxReceipt, isLoading: deactivateTxLoading } = useWaitForTransactionReceipt({
+      hash: deactivateHash,
+    });
+  
+    useEffect(() => {
+      loadEvents();
+    }, [loadEvents]);
+  
+    // Filter events where user is the organizer
+    const myEvents = events.filter(event =>
+      isAuthenticated && organization
+        ? event.organizer.toLowerCase() === organization.address.toLowerCase()
+        : event.organizer.toLowerCase() === address?.toLowerCase()
+    );
   // Filter upcoming events for timeline
   const upcomingEvents = myEvents.filter(event => {
     const eventDate = new Date(`${event.date}T${event.time}`);
@@ -157,9 +163,9 @@ export default function DashboardPage() {
               {address ? address.slice(0, 2).toUpperCase() : "O"}
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-foreground mb-2">Your Organization</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{organization?.name || 'Your Organization'}</h3>
               <p className="text-sm text-foreground/70 mb-4">
-                Manage your organization profile and settings. This information will be displayed on your event pages.
+                {organization?.description || 'Manage your organization profile and settings. This information will be displayed on your event pages.'}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
@@ -168,7 +174,8 @@ export default function DashboardPage() {
                     type="text"
                     placeholder="Enter organization name"
                     className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    defaultValue="Your Organization" // Placeholder
+                    defaultValue={organization?.name || ""} // Placeholder
+                    readOnly
                   />
                 </div>
                 <div>
@@ -177,7 +184,8 @@ export default function DashboardPage() {
                     type="url"
                     placeholder="https://yourwebsite.com"
                     className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    defaultValue="" // Placeholder
+                    defaultValue={organization?.website || ""} // Placeholder
+                    readOnly
                   />
                 </div>
                 <div>
@@ -187,6 +195,7 @@ export default function DashboardPage() {
                     placeholder="contact@yourorg.com"
                     className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     defaultValue="" // Placeholder
+                    readOnly
                   />
                 </div>
                 <div>
@@ -196,16 +205,9 @@ export default function DashboardPage() {
                     placeholder="+1 (555) 123-4567"
                     className="w-full px-3 py-2 border border-foreground/20 rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     defaultValue="" // Placeholder
+                    readOnly
                   />
                 </div>
-              </div>
-              <div className="flex gap-3">
-                <button className="btn-primary text-sm px-4 py-2">
-                  Save Changes
-                </button>
-                <button className="btn-secondary text-sm px-4 py-2">
-                  Upload Logo
-                </button>
               </div>
             </div>
           </div>

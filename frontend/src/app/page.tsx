@@ -69,16 +69,7 @@ export default function Home() {
                 </svg>
               </Link>
 
-              <Link
-                href="/host/signin"
-                className="btn-secondary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 group w-full sm:w-auto hover:scale-105 transition-all"
-                data-aos="zoom-in" data-aos-delay="900"
-              >
-                <span>Host Events</span>
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 ml-2 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </Link>
+              <Link href="/dashboard" className="btn-primary">Host Events</Link>
             </div>
           </div>
         </div>

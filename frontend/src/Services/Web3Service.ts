@@ -166,6 +166,21 @@ class Web3Service {
     return transactionHash;
   }
 
+  async registerMe(): Promise<Hash> {
+    if (!this.isInitialized || !this.walletClient) {
+      throw new Error('Web3Service not initialized or wallet not connected');
+    }
+
+    const transactionHash = await this.walletClient.writeContract({
+      address: this.eventFactoryAddress!,
+      abi: EVENT_FACTORY_ABI,
+      functionName: 'registerMe',
+      account: this.walletClient.account,
+    });
+
+    return transactionHash;
+  }
+
   async getAllEvents() {
       if (!this.isInitialized) {
           throw new Error('Web3Service not initialized');

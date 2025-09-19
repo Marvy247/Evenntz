@@ -50,7 +50,8 @@ export const useCreateEvent = () => {
   const createEvent = (
     name: string,
     eventType: EventType, // EventType enum (0 = FREE, 1 = PAID, 2 = APPROVAL)
-    ticketPrice: bigint
+    ticketPrice: bigint,
+    maxTickets: bigint
   ) => {
     // Validate parameters before calling
     if (!name || name.trim() === '') {
@@ -61,18 +62,24 @@ export const useCreateEvent = () => {
       throw new Error('Ticket price cannot be negative');
     }
 
+    if (maxTickets < BigInt(0)) {
+      throw new Error('Max tickets cannot be negative');
+    }
+
     console.log('Creating event with parameters:', {
       name,
       eventType,
       ticketPrice: ticketPrice.toString(),
+      maxTickets: maxTickets.toString(),
       eventTypeType: typeof eventType,
-      ticketPriceType: typeof ticketPrice
+      ticketPriceType: typeof ticketPrice,
+      maxTicketsType: typeof maxTickets
     });
 
     console.log('🔍 Calling writeContract with:', {
       address: eventFactoryAddress,
       functionName: "createEvent",
-      args: [name, eventType, ticketPrice],
+      args: [name, eventType, ticketPrice, maxTickets],
       isPending,
       hash
     });
@@ -81,7 +88,7 @@ export const useCreateEvent = () => {
       address: eventFactoryAddress,
       abi: eventFactoryABI,
       functionName: "createEvent",
-      args: [name, eventType, ticketPrice],
+      args: [name, eventType, ticketPrice, maxTickets],
     });
 
     console.log('🔍 writeContract called, current state:', { isPending, hash });
